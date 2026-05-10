@@ -180,12 +180,51 @@
 										<div class="setting-item-info">
 											<label for="auto-clip-toggle" data-i18n="autoClip">Auto-clip pages</label>
 											<div class="setting-item-description" data-i18n="autoClipDescription">
-												Automatically save matching pages to your Downloads folder after they load.
+												Automatically save matching pages to your Downloads folder.
 											</div>
 										</div>
 										<div class="setting-item-control">
 											<div class="checkbox-container">
 												<input type="checkbox" id="auto-clip-toggle" />
+											</div>
+										</div>
+									</div>
+									<div class="setting-item mod-horizontal mod-toggle">
+										<div class="setting-item-info">
+											<label for="auto-clip-page-load-trigger" data-i18n="autoClipTriggerPageLoad">After page load</label>
+											<div class="setting-item-description" data-i18n="autoClipTriggerPageLoadDescription">
+												Save matching pages after they finish loading and the delay has elapsed.
+											</div>
+										</div>
+										<div class="setting-item-control">
+											<div class="checkbox-container">
+												<input type="checkbox" id="auto-clip-page-load-trigger" />
+											</div>
+										</div>
+									</div>
+									<div class="setting-item mod-horizontal mod-toggle">
+										<div class="setting-item-info">
+											<label for="auto-clip-tab-close-trigger" data-i18n="autoClipTriggerTabClose">When tab closes</label>
+											<div class="setting-item-description" data-i18n="autoClipTriggerTabCloseDescription">
+												Save the latest prepared snapshot when a matching tab is closed.
+											</div>
+										</div>
+										<div class="setting-item-control">
+											<div class="checkbox-container">
+												<input type="checkbox" id="auto-clip-tab-close-trigger" />
+											</div>
+										</div>
+									</div>
+									<div class="setting-item mod-horizontal mod-toggle">
+										<div class="setting-item-info">
+											<label for="auto-clip-tab-discard-trigger" data-i18n="autoClipTriggerTabDiscard">When tab is discarded</label>
+											<div class="setting-item-description" data-i18n="autoClipTriggerTabDiscardDescription">
+												Save the latest prepared snapshot before the browser unloads a matching tab.
+											</div>
+										</div>
+										<div class="setting-item-control">
+											<div class="checkbox-container">
+												<input type="checkbox" id="auto-clip-tab-discard-trigger" />
 											</div>
 										</div>
 									</div>

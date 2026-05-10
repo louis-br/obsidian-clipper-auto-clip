@@ -63,7 +63,7 @@
 		"message": "Auto-clip pages"
 	},
 	"autoClipDescription": {
-		"message": "Automatically save matching pages to your Downloads folder after they load."
+		"message": "Automatically save matching pages to your Downloads folder."
 	},
 	"autoClipSiteAccess": {
 		"message": "Auto-clip site access"
@@ -88,6 +88,24 @@
 	},
 	"autoClipDelayDescription": {
 		"message": "Seconds to wait after the page finishes loading before clipping."
+	},
+	"autoClipTriggerPageLoad": {
+		"message": "After page load"
+	},
+	"autoClipTriggerPageLoadDescription": {
+		"message": "Save matching pages after they finish loading and the delay has elapsed."
+	},
+	"autoClipTriggerTabClose": {
+		"message": "When tab closes"
+	},
+	"autoClipTriggerTabCloseDescription": {
+		"message": "Save the latest prepared snapshot when a matching tab is closed."
+	},
+	"autoClipTriggerTabDiscard": {
+		"message": "When tab is discarded"
+	},
+	"autoClipTriggerTabDiscardDescription": {
+		"message": "Save the latest prepared snapshot before the browser unloads a matching tab."
 	},
 	"autoClipUrlPatterns": {
 		"message": "Auto-clip URL patterns"

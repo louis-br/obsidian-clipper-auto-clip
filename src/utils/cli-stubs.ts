@@ -42,6 +42,11 @@ export const generalSettings: Settings = {
 	},
 	autoClipSettings: {
 		enabled: false,
+		triggers: {
+			pageLoad: true,
+			tabClose: false,
+			tabDiscard: false,
+		},
 		urlPatterns: ['*'],
 		delayMs: 3000,
 		dedupeHours: 24,

@@ -5,7 +5,13 @@ import { TextHighlightData } from './utils/highlighter';
 import { debounce } from './utils/debounce';
 import { Settings } from './types/types';
 import { debugLog } from './utils/debug';
-import { debugAutoClipActiveTab, scheduleAutoClipForTab } from './utils/auto-clip';
+import {
+	debugAutoClipActiveTab,
+	handleAutoClipPageChanged,
+	handleAutoClipTabDiscarded,
+	handleAutoClipTabRemoved,
+	scheduleAutoClipForTab
+} from './utils/auto-clip';
 
 const YOUTUBE_EMBED_RULE_ID = 9001;
 const YOUTUBE_INNERTUBE_RULE_ID = 9002;
@@ -239,6 +245,9 @@ async function initialize() {
 		browser.tabs.onRemoved.addListener((tabId) => {
 			delete highlighterModeState[tabId];
 			delete readerModeState[tabId];
+			handleAutoClipTabRemoved(tabId).catch(error => {
+				console.error('[Obsidian Clipper] Failed to handle auto-clip tab removal:', error);
+			});
 		});
 		
 		// Initialize context menu
@@ -334,7 +343,7 @@ browser.runtime.onMessage.addListener((request: unknown) => {
 
 browser.runtime.onMessage.addListener((request: unknown, sender: browser.Runtime.MessageSender, sendResponse: (response?: any) => void): true | undefined => {
 	if (typeof request === 'object' && request !== null) {
-		const typedRequest = request as { action: string; isActive?: boolean; hasHighlights?: boolean; tabId?: number; text?: string; section?: string; readerUrl?: string };
+		const typedRequest = request as { action: string; isActive?: boolean; hasHighlights?: boolean; tabId?: number; text?: string; section?: string; readerUrl?: string; url?: string };
 		
 		if (typedRequest.action === 'copy-to-clipboard' && typedRequest.text) {
 			// Use content script to copy to clipboard
@@ -366,6 +375,16 @@ browser.runtime.onMessage.addListener((request: unknown, sender: browser.Runtime
 		if (typedRequest.action === "debugAutoClipActiveTab") {
 			debugAutoClipActiveTab()
 				.then(sendResponse)
+				.catch((error) => sendResponse({
+					success: false,
+					error: error instanceof Error ? error.message : String(error)
+				}));
+			return true;
+		}
+
+		if (typedRequest.action === "autoClipPageChanged" && sender.tab?.id) {
+			handleAutoClipPageChanged(sender.tab.id, typedRequest.url || sender.tab.url)
+				.then(() => sendResponse({ success: true }))
 				.catch((error) => sendResponse({
 					success: false,
 					error: error instanceof Error ? error.message : String(error)
@@ -906,6 +925,12 @@ async function setupTabListeners() {
 		browser.tabs.onActivated.addListener(handleTabChange);
 	}
 	browser.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
+		if ((changeInfo as { discarded?: boolean }).discarded === true) {
+			handleAutoClipTabDiscarded(tabId).catch(error => {
+				console.error('[Obsidian Clipper] Failed to handle auto-clip tab discard:', error);
+			});
+		}
+
 		if (changeInfo.status === 'complete') {
 			if (supportsSidePanelTabUpdates) {
 				handleTabChange({ tabId, windowId: tab.windowId });

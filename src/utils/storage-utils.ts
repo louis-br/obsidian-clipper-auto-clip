@@ -6,6 +6,11 @@ export type { Settings, ModelConfig, PropertyType, HistoryEntry, Provider, Ratin
 
 const defaultAutoClipSettings: AutoClipSettings = {
 	enabled: false,
+	triggers: {
+		pageLoad: true,
+		tabClose: false,
+		tabDiscard: false
+	},
 	urlPatterns: ['*'],
 	delayMs: 3000,
 	dedupeHours: 24
@@ -224,6 +229,11 @@ export async function loadSettings(): Promise<Settings> {
 		},
 		autoClipSettings: {
 			enabled: data.auto_clip_settings?.enabled ?? defaultSettings.autoClipSettings.enabled,
+			triggers: {
+				pageLoad: data.auto_clip_settings?.triggers?.pageLoad ?? defaultSettings.autoClipSettings.triggers.pageLoad,
+				tabClose: data.auto_clip_settings?.triggers?.tabClose ?? defaultSettings.autoClipSettings.triggers.tabClose,
+				tabDiscard: data.auto_clip_settings?.triggers?.tabDiscard ?? defaultSettings.autoClipSettings.triggers.tabDiscard
+			},
 			urlPatterns: Array.isArray(data.auto_clip_settings?.urlPatterns)
 				? data.auto_clip_settings.urlPatterns.filter(pattern => typeof pattern === 'string')
 				: defaultSettings.autoClipSettings.urlPatterns,
@@ -293,6 +303,7 @@ export async function saveSettings(settings?: Partial<Settings>): Promise<void> 
 		},
 		auto_clip_settings: {
 			enabled: generalSettings.autoClipSettings.enabled,
+			triggers: generalSettings.autoClipSettings.triggers,
 			urlPatterns: generalSettings.autoClipSettings.urlPatterns,
 			delayMs: generalSettings.autoClipSettings.delayMs,
 			dedupeHours: generalSettings.autoClipSettings.dedupeHours

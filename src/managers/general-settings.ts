@@ -259,6 +259,9 @@ function saveSettingsFromForm(): void {
 	const alwaysShowHighlightsToggle = document.getElementById('highlighter-visibility') as HTMLInputElement;
 	const highlightBehaviorSelect = document.getElementById('highlighter-behavior') as HTMLSelectElement;
 	const autoClipToggle = document.getElementById('auto-clip-toggle') as HTMLInputElement;
+	const autoClipPageLoadTrigger = document.getElementById('auto-clip-page-load-trigger') as HTMLInputElement;
+	const autoClipTabCloseTrigger = document.getElementById('auto-clip-tab-close-trigger') as HTMLInputElement;
+	const autoClipTabDiscardTrigger = document.getElementById('auto-clip-tab-discard-trigger') as HTMLInputElement;
 	const autoClipPatternsInput = document.getElementById('auto-clip-url-patterns') as HTMLTextAreaElement;
 	const autoClipDelayInput = document.getElementById('auto-clip-delay') as HTMLInputElement;
 	const autoClipDedupeHoursInput = document.getElementById('auto-clip-dedupe-hours') as HTMLInputElement;
@@ -278,6 +281,11 @@ function saveSettingsFromForm(): void {
 		autoClipSettings: {
 			...generalSettings.autoClipSettings,
 			enabled: autoClipToggle?.checked ?? generalSettings.autoClipSettings.enabled,
+			triggers: {
+				pageLoad: autoClipPageLoadTrigger?.checked ?? generalSettings.autoClipSettings.triggers.pageLoad,
+				tabClose: autoClipTabCloseTrigger?.checked ?? generalSettings.autoClipSettings.triggers.tabClose,
+				tabDiscard: autoClipTabDiscardTrigger?.checked ?? generalSettings.autoClipSettings.triggers.tabDiscard
+			},
 			urlPatterns: autoClipPatternsInput
 				? parseAutoClipPatterns(autoClipPatternsInput.value)
 				: generalSettings.autoClipSettings.urlPatterns,
@@ -366,6 +374,9 @@ function initializeSilentOpenToggle(): void {
 }
 
 function initializeAutoClipSettings(): void {
+	const pageLoadTrigger = document.getElementById('auto-clip-page-load-trigger') as HTMLInputElement;
+	const tabCloseTrigger = document.getElementById('auto-clip-tab-close-trigger') as HTMLInputElement;
+	const tabDiscardTrigger = document.getElementById('auto-clip-tab-discard-trigger') as HTMLInputElement;
 	const patternsInput = document.getElementById('auto-clip-url-patterns') as HTMLTextAreaElement;
 	const delayInput = document.getElementById('auto-clip-delay') as HTMLInputElement;
 	const dedupeHoursInput = document.getElementById('auto-clip-dedupe-hours') as HTMLInputElement;
@@ -380,6 +391,20 @@ function initializeAutoClipSettings(): void {
 			}
 		});
 	});
+
+	initializeAutoClipTriggerToggle('auto-clip-page-load-trigger', 'pageLoad');
+	initializeAutoClipTriggerToggle('auto-clip-tab-close-trigger', 'tabClose');
+	initializeAutoClipTriggerToggle('auto-clip-tab-discard-trigger', 'tabDiscard');
+
+	if (pageLoadTrigger) {
+		pageLoadTrigger.checked = generalSettings.autoClipSettings.triggers.pageLoad;
+	}
+	if (tabCloseTrigger) {
+		tabCloseTrigger.checked = generalSettings.autoClipSettings.triggers.tabClose;
+	}
+	if (tabDiscardTrigger) {
+		tabDiscardTrigger.checked = generalSettings.autoClipSettings.triggers.tabDiscard;
+	}
 
 	if (patternsInput) {
 		patternsInput.value = generalSettings.autoClipSettings.urlPatterns.join('\n');
@@ -400,6 +425,24 @@ function initializeAutoClipSettings(): void {
 			console.error('Failed to request auto-clip site access:', error);
 			updateAutoClipSiteAccessStatus(false);
 		}
+	});
+}
+
+function initializeAutoClipTriggerToggle(
+	id: string,
+	triggerName: keyof Settings['autoClipSettings']['triggers']
+): void {
+	initializeSettingToggle(id, generalSettings.autoClipSettings.triggers[triggerName], (checked) => {
+		saveSettings({
+			...generalSettings,
+			autoClipSettings: {
+				...generalSettings.autoClipSettings,
+				triggers: {
+					...generalSettings.autoClipSettings.triggers,
+					[triggerName]: checked
+				}
+			}
+		});
 	});
 }
 

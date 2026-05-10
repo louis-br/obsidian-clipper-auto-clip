@@ -70,8 +70,15 @@ export interface ReaderSettings {
 	customCss: string;
 }
 
+export interface AutoClipTriggers {
+	pageLoad: boolean;
+	tabClose: boolean;
+	tabDiscard: boolean;
+}
+
 export interface AutoClipSettings {
 	enabled: boolean;
+	triggers: AutoClipTriggers;
 	urlPatterns: string[];
 	delayMs: number;
 	dedupeHours: number;

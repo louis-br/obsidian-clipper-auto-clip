@@ -89,6 +89,73 @@ declare global {
 	// Firefox
 	browser.runtime.sendMessage({ action: "contentScriptLoaded" });
 
+	let autoClipChangeTimer: ReturnType<typeof setTimeout> | null = null;
+	let isAutoClipChangeSuppressed = false;
+	let lastAutoClipChangeUrl = window.location.href;
+
+	function scheduleAutoClipPageChanged(reason: string, delay = 1500): void {
+		if (window.obsidianClipperGeneration !== myGeneration) {
+			return;
+		}
+		if (isAutoClipChangeSuppressed) {
+			return;
+		}
+		if (autoClipChangeTimer) {
+			clearTimeout(autoClipChangeTimer);
+		}
+		autoClipChangeTimer = setTimeout(() => {
+			autoClipChangeTimer = null;
+			lastAutoClipChangeUrl = window.location.href;
+			browser.runtime.sendMessage({
+				action: "autoClipPageChanged",
+				url: window.location.href,
+				reason
+			}).catch(() => {
+				// The background page may be unavailable during navigation or shutdown.
+			});
+		}, Math.max(0, delay));
+	}
+
+	function initializeAutoClipChangeSignals(): void {
+		const observer = new MutationObserver(() => scheduleAutoClipPageChanged('dom'));
+		observer.observe(document.documentElement, {
+			childList: true,
+			subtree: true,
+			characterData: true,
+			attributes: true
+		});
+
+		const notifyInputChange = () => scheduleAutoClipPageChanged('input');
+		document.addEventListener('input', notifyInputChange, true);
+		document.addEventListener('change', notifyInputChange, true);
+		document.addEventListener('visibilitychange', () => {
+			if (document.visibilityState === 'hidden') {
+				scheduleAutoClipPageChanged('visibility-hidden', 0);
+			}
+		});
+		window.addEventListener('pagehide', () => scheduleAutoClipPageChanged('pagehide', 0));
+
+		const notifyUrlChange = () => {
+			if (window.location.href !== lastAutoClipChangeUrl) {
+				scheduleAutoClipPageChanged('url', 0);
+			}
+		};
+		const originalPushState = history.pushState;
+		const originalReplaceState = history.replaceState;
+		history.pushState = function(...args) {
+			const result = originalPushState.apply(this, args);
+			notifyUrlChange();
+			return result;
+		};
+		history.replaceState = function(...args) {
+			const result = originalReplaceState.apply(this, args);
+			notifyUrlChange();
+			return result;
+		};
+		window.addEventListener('popstate', notifyUrlChange);
+		window.addEventListener('hashchange', notifyUrlChange);
+	}
+
 	interface ContentResponse {
 		content: string;
 		selectedHtml: string;
@@ -212,6 +279,7 @@ declare global {
 
 		if (request.action === "getPageContent") {
 			// Flatten shadow DOM before extraction (async, needs main world)
+			isAutoClipChangeSuppressed = true;
 			const flattenTimeout = new Promise<void>(resolve => setTimeout(resolve, 3000));
 			Promise.race([flattenShadowDom(document), flattenTimeout]).then(async () => {
 				let selectedHtml = '';
@@ -331,6 +399,10 @@ declare global {
 			}).catch((error: unknown) => {
 				console.error('[Obsidian Clipper] getPageContent error:', error);
 				sendResponse({ success: false, error: error instanceof Error ? error.message : String(error) });
+			}).finally(() => {
+				setTimeout(() => {
+					isAutoClipChangeSuppressed = false;
+				}, 0);
 			});
 			return true;
 		} else if (request.action === "extractContent") {
@@ -476,6 +548,7 @@ declare global {
 
 	// Initialize highlighter
 	initializeHighlighter();
+	initializeAutoClipChangeSignals();
 
 	// Expose highlighter API on window so reader-script.js (a separate
 	// webpack bundle injected when reader mode activates) can delegate
