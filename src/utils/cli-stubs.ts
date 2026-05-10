@@ -40,6 +40,12 @@ export const generalSettings: Settings = {
 		highlightActiveLine: true,
 		customCss: '',
 	},
+	autoClipSettings: {
+		enabled: false,
+		urlPatterns: ['*'],
+		delayMs: 3000,
+		dedupeHours: 24,
+	},
 	stats: {
 		addToObsidian: 0,
 		saveFile: 0,

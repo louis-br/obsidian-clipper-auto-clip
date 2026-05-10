@@ -20,8 +20,18 @@ export const storage = {
 };
 
 export const tabs = {
+	get: async () => ({}),
 	query: async () => [],
 	sendMessage: async () => ({}),
+};
+
+export const downloads = {
+	download: async () => 1,
+};
+
+export const permissions = {
+	contains: async () => true,
+	request: async () => true,
 };
 
 export const i18n = {
@@ -32,5 +42,7 @@ export default {
 	runtime,
 	storage,
 	tabs,
+	downloads,
+	permissions,
 	i18n,
 };

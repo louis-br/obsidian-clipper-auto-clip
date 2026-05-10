@@ -59,6 +59,42 @@
 	"autoRunInterpreterDescription": {
 		"message": "Run prompt variables immediately if the template contains any. This will consume API credits with your model provider. Turn off if you only want to run interpreter manually."
 	},
+	"autoClip": {
+		"message": "Auto-clip pages"
+	},
+	"autoClipDescription": {
+		"message": "Automatically save matching pages to your Downloads folder after they load."
+	},
+	"autoClipSiteAccess": {
+		"message": "Auto-clip site access"
+	},
+	"autoClipSiteAccessDescription": {
+		"message": "Allow Web Clipper to read matching pages in the background."
+	},
+	"autoClipSiteAccessGranted": {
+		"message": "Access granted."
+	},
+	"autoClipSiteAccessMissing": {
+		"message": "Access not granted."
+	},
+	"autoClipDedupeHours": {
+		"message": "Auto-clip duplicate window"
+	},
+	"autoClipDedupeHoursDescription": {
+		"message": "Hours to wait before clipping the same URL with the same template again. Use 0 to disable."
+	},
+	"autoClipDelay": {
+		"message": "Auto-clip delay"
+	},
+	"autoClipDelayDescription": {
+		"message": "Seconds to wait after the page finishes loading before clipping."
+	},
+	"autoClipUrlPatterns": {
+		"message": "Auto-clip URL patterns"
+	},
+	"autoClipUrlPatternsDescription": {
+		"message": "One prefix or /regex/ per line. Use * to match all pages."
+	},
 	"behavior": {
 		"message": "Behavior"
 	},
@@ -350,6 +386,9 @@
 	},
 	"generalSettings": {
 		"message": "General settings"
+	},
+	"grantAccess": {
+		"message": "Grant access"
 	},
 	"getApiKeyHere": {
 		"message": "Get your $1 API key here."

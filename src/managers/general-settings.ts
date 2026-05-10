@@ -18,6 +18,7 @@ import { getClipHistory } from '../utils/storage-utils';
 import dayjs from 'dayjs';
 import weekOfYear from 'dayjs/plugin/weekOfYear';
 import { showModal, hideModal } from '../utils/modal-utils';
+import { parseAutoClipPatterns } from '../utils/auto-clip-rules';
 
 dayjs.extend(weekOfYear);
 
@@ -216,6 +217,7 @@ export function initializeGeneralSettings(): void {
 		initializeBetaFeaturesToggle();
 		initializeLegacyModeToggle();
 		initializeSilentOpenToggle();
+		initializeAutoClipSettings();
 		initializeVaultInput();
 		initializeOpenBehaviorDropdown();
 		initializeKeyboardShortcuts();
@@ -256,6 +258,12 @@ function saveSettingsFromForm(): void {
 	const highlighterToggle = document.getElementById('highlighter-toggle') as HTMLInputElement;
 	const alwaysShowHighlightsToggle = document.getElementById('highlighter-visibility') as HTMLInputElement;
 	const highlightBehaviorSelect = document.getElementById('highlighter-behavior') as HTMLSelectElement;
+	const autoClipToggle = document.getElementById('auto-clip-toggle') as HTMLInputElement;
+	const autoClipPatternsInput = document.getElementById('auto-clip-url-patterns') as HTMLTextAreaElement;
+	const autoClipDelayInput = document.getElementById('auto-clip-delay') as HTMLInputElement;
+	const autoClipDedupeHoursInput = document.getElementById('auto-clip-dedupe-hours') as HTMLInputElement;
+	const delaySeconds = Number(autoClipDelayInput?.value);
+	const dedupeHours = Number(autoClipDedupeHoursInput?.value);
 
 	const updatedSettings = {
 		...generalSettings, // Keep existing settings
@@ -266,7 +274,20 @@ function saveSettingsFromForm(): void {
 		silentOpen: silentOpenToggle?.checked ?? generalSettings.silentOpen,
 		highlighterEnabled: highlighterToggle?.checked ?? generalSettings.highlighterEnabled,
 		alwaysShowHighlights: alwaysShowHighlightsToggle?.checked ?? generalSettings.alwaysShowHighlights,
-		highlightBehavior: highlightBehaviorSelect?.value ?? generalSettings.highlightBehavior
+		highlightBehavior: highlightBehaviorSelect?.value ?? generalSettings.highlightBehavior,
+		autoClipSettings: {
+			...generalSettings.autoClipSettings,
+			enabled: autoClipToggle?.checked ?? generalSettings.autoClipSettings.enabled,
+			urlPatterns: autoClipPatternsInput
+				? parseAutoClipPatterns(autoClipPatternsInput.value)
+				: generalSettings.autoClipSettings.urlPatterns,
+			delayMs: Number.isFinite(delaySeconds)
+				? Math.max(0, Math.round(delaySeconds * 1000))
+				: generalSettings.autoClipSettings.delayMs,
+			dedupeHours: Number.isFinite(dedupeHours)
+				? Math.max(0, Math.round(dedupeHours))
+				: generalSettings.autoClipSettings.dedupeHours
+		}
 	};
 
 	saveSettings(updatedSettings);
@@ -342,6 +363,52 @@ function initializeSilentOpenToggle(): void {
 	initializeSettingToggle('silent-open-toggle', generalSettings.silentOpen, (checked) => {
 		saveSettings({ ...generalSettings, silentOpen: checked });
 	});
+}
+
+function initializeAutoClipSettings(): void {
+	const patternsInput = document.getElementById('auto-clip-url-patterns') as HTMLTextAreaElement;
+	const delayInput = document.getElementById('auto-clip-delay') as HTMLInputElement;
+	const dedupeHoursInput = document.getElementById('auto-clip-dedupe-hours') as HTMLInputElement;
+	const siteAccessButton = document.getElementById('auto-clip-site-access') as HTMLButtonElement;
+
+	initializeSettingToggle('auto-clip-toggle', generalSettings.autoClipSettings.enabled, (checked) => {
+		saveSettings({
+			...generalSettings,
+			autoClipSettings: {
+				...generalSettings.autoClipSettings,
+				enabled: checked
+			}
+		});
+	});
+
+	if (patternsInput) {
+		patternsInput.value = generalSettings.autoClipSettings.urlPatterns.join('\n');
+	}
+	if (delayInput) {
+		delayInput.value = String(Math.round(generalSettings.autoClipSettings.delayMs / 1000));
+	}
+	if (dedupeHoursInput) {
+		dedupeHoursInput.value = String(generalSettings.autoClipSettings.dedupeHours);
+	}
+
+	updateAutoClipSiteAccessStatus();
+	siteAccessButton?.addEventListener('click', async () => {
+		try {
+			const granted = await browser.permissions.request({ origins: ['<all_urls>'] });
+			updateAutoClipSiteAccessStatus(granted);
+		} catch (error) {
+			console.error('Failed to request auto-clip site access:', error);
+			updateAutoClipSiteAccessStatus(false);
+		}
+	});
+}
+
+async function updateAutoClipSiteAccessStatus(knownGranted?: boolean): Promise<void> {
+	const statusEl = document.getElementById('auto-clip-site-access-status');
+	if (!statusEl) return;
+
+	const granted = knownGranted ?? await browser.permissions.contains({ origins: ['<all_urls>'] });
+	statusEl.textContent = ` ${getMessage(granted ? 'autoClipSiteAccessGranted' : 'autoClipSiteAccessMissing')}`;
 }
 
 function initializeOpenBehaviorDropdown(): void {

@@ -70,6 +70,13 @@ export interface ReaderSettings {
 	customCss: string;
 }
 
+export interface AutoClipSettings {
+	enabled: boolean;
+	urlPatterns: string[];
+	delayMs: number;
+	dedupeHours: number;
+}
+
 export interface Settings {
 	vaults: string[];
 	showMoreActionsButton: boolean;
@@ -88,6 +95,7 @@ export interface Settings {
 	defaultPromptContext: string;
 	propertyTypes: PropertyType[];
 	readerSettings: ReaderSettings;
+	autoClipSettings: AutoClipSettings;
 	stats: {
 		addToObsidian: number;
 		saveFile: number;

@@ -9,7 +9,9 @@
 		"activeTab",
 		"clipboardWrite",
 		"contextMenus",
+		"downloads",
 		"storage",
+		"tabs",
 		"scripting",
 		"webRequest",
 		"webRequestBlocking"
@@ -90,10 +92,7 @@
 			}
 		},
 		"gecko_android": {
-			"strict_min_version": "113.0",
-			"data_collection_permissions": {
-				"required": ["none"]
-			}
+			"strict_min_version": "113.0"
 		}
 	}
 }

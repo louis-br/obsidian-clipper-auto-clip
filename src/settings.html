@@ -178,6 +178,64 @@
 									</div>
 									<div class="setting-item mod-horizontal mod-toggle">
 										<div class="setting-item-info">
+											<label for="auto-clip-toggle" data-i18n="autoClip">Auto-clip pages</label>
+											<div class="setting-item-description" data-i18n="autoClipDescription">
+												Automatically save matching pages to your Downloads folder after they load.
+											</div>
+										</div>
+										<div class="setting-item-control">
+											<div class="checkbox-container">
+												<input type="checkbox" id="auto-clip-toggle" />
+											</div>
+										</div>
+									</div>
+									<div class="setting-item mod-horizontal">
+										<div class="setting-item-info">
+											<label for="auto-clip-url-patterns" data-i18n="autoClipUrlPatterns">Auto-clip URL patterns</label>
+											<div class="setting-item-description" data-i18n="autoClipUrlPatternsDescription">
+												One prefix or /regex/ per line. Use * to match all pages.
+											</div>
+										</div>
+										<div class="setting-item-control">
+											<textarea id="auto-clip-url-patterns" rows="3" spellcheck="false"></textarea>
+										</div>
+									</div>
+									<div class="setting-item mod-horizontal">
+										<div class="setting-item-info">
+											<label for="auto-clip-site-access" data-i18n="autoClipSiteAccess">Auto-clip site access</label>
+											<div class="setting-item-description">
+												<span data-i18n="autoClipSiteAccessDescription">Allow Web Clipper to read matching pages in the background.</span>
+												<span id="auto-clip-site-access-status"></span>
+											</div>
+										</div>
+										<div class="setting-item-control">
+											<button type="button" id="auto-clip-site-access" data-i18n="grantAccess">Grant access</button>
+										</div>
+									</div>
+									<div class="setting-item mod-horizontal">
+										<div class="setting-item-info">
+											<label for="auto-clip-delay" data-i18n="autoClipDelay">Auto-clip delay</label>
+											<div class="setting-item-description" data-i18n="autoClipDelayDescription">
+												Seconds to wait after the page finishes loading before clipping.
+											</div>
+										</div>
+										<div class="setting-item-control">
+											<input type="number" id="auto-clip-delay" min="0" step="1" />
+										</div>
+									</div>
+									<div class="setting-item mod-horizontal">
+										<div class="setting-item-info">
+											<label for="auto-clip-dedupe-hours" data-i18n="autoClipDedupeHours">Auto-clip duplicate window</label>
+											<div class="setting-item-description" data-i18n="autoClipDedupeHoursDescription">
+												Hours to wait before clipping the same URL with the same template again. Use 0 to disable.
+											</div>
+										</div>
+										<div class="setting-item-control">
+											<input type="number" id="auto-clip-dedupe-hours" min="0" step="1" />
+										</div>
+									</div>
+									<div class="setting-item mod-horizontal mod-toggle">
+										<div class="setting-item-info">
 											<label for="silent-open-toggle" data-i18n="silentOpen">Save clipped note without opening&nbsp;it</label>
 											<div class="setting-item-description" data-i18n="silentOpenDescription">
 												Clipped notes will be saved but will not open as a new tab. Obsidian will still be brought to the foreground.

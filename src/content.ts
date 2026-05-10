@@ -1,5 +1,6 @@
 import browser from './utils/browser-polyfill';
 import * as highlighter from './utils/highlighter';
+import type { AnyHighlightData } from './utils/highlighter';
 import { removeExistingHighlights } from './utils/highlighter-overlays';
 import { loadSettings, generalSettings } from './utils/storage-utils';
 import { getDomain } from './utils/string-utils';
@@ -12,6 +13,7 @@ import { saveFile } from './utils/file-utils';
 import { debugLog } from './utils/debug';
 import { updateSidebarWidth, addResizeHandle, cleanupResizeHandlers } from './utils/iframe-resize';
 import { parseForClip } from './utils/clip-utils';
+import { initializePageContent, InitializedPageContent } from './utils/content-extractor';
 
 declare global {
 	interface Window {
@@ -106,6 +108,18 @@ declare global {
 		wordCount: number;
 		language: string;
 		metaTags: { name?: string | null; property?: string | null; content: string | null }[];
+		initializedContent?: InitializedPageContent;
+	}
+
+	function normalizeHighlightsForInitialization(highlights: string[]): AnyHighlightData[] {
+		return highlights.map(highlight => ({
+			type: 'text',
+			id: Date.now().toString(),
+			xpath: '',
+			content: `<div>` + highlight + `</div>`,
+			startOffset: 0,
+			endOffset: highlight.length
+		}));
 	}
 
 	browser.runtime.onMessage.addListener((request: any, sender, sendResponse) => {
@@ -211,9 +225,13 @@ declare global {
 					selectedHtml = serializeChildren(div);
 				}
 
+				const pageHtml = document.documentElement.outerHTML;
+				const parser = new DOMParser();
+				const extractionDoc = parser.parseFromString(pageHtml, 'text/html');
+
 				// Use parseAsync to ensure async variables like {{transcript}} are available.
 				// If it hangs (e.g. another extension has corrupted fetch), fall back to sync parse.
-				const defuddle = new Defuddle(document, { url: document.URL });
+				const defuddle = new Defuddle(extractionDoc, { url: document.URL });
 				const parseTimeout = new Promise<never>((_, reject) =>
 					setTimeout(() => reject(new Error('parseAsync timeout')), 8000)
 				);
@@ -223,10 +241,8 @@ declare global {
 					...defuddled.variables,
 				};
 
-				// Create a new DOMParser
-				const parser = new DOMParser();
 				// Parse the document's HTML
-				const doc = parser.parseFromString(document.documentElement.outerHTML, 'text/html');
+				const doc = parser.parseFromString(pageHtml, 'text/html');
 
 				// Remove all script and style elements
 				doc.querySelectorAll('script, style').forEach(el => el.remove());
@@ -285,6 +301,28 @@ declare global {
 					wordCount: defuddled.wordCount,
 					metaTags: defuddled.metaTags || []
 				};
+				if (request.includeInitializedContent) {
+					await loadSettings();
+					response.initializedContent = await initializePageContent(
+						response.content,
+						response.selectedHtml,
+						response.extractedContent,
+						document.URL,
+						response.schemaOrgData,
+						response.fullHtml,
+						normalizeHighlightsForInitialization(response.highlights || []),
+						response.title,
+						response.author,
+						response.description,
+						response.favicon,
+						response.image,
+						response.published,
+						response.site,
+						response.wordCount,
+						response.language || '',
+						response.metaTags
+					);
+				}
 				if (defuddled.title) {
 					highlighter.setPageTitle(defuddled.title);
 				}

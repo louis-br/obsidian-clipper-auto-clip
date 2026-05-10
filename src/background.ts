@@ -5,6 +5,7 @@ import { TextHighlightData } from './utils/highlighter';
 import { debounce } from './utils/debounce';
 import { Settings } from './types/types';
 import { debugLog } from './utils/debug';
+import { debugAutoClipActiveTab, scheduleAutoClipForTab } from './utils/auto-clip';
 
 const YOUTUBE_EMBED_RULE_ID = 9001;
 const YOUTUBE_INNERTUBE_RULE_ID = 9002;
@@ -361,6 +362,16 @@ browser.runtime.onMessage.addListener((request: unknown, sender: browser.Runtime
 		}
 
 		// fetchProxy is handled by a separate listener below
+
+		if (typedRequest.action === "debugAutoClipActiveTab") {
+			debugAutoClipActiveTab()
+				.then(sendResponse)
+				.catch((error) => sendResponse({
+					success: false,
+					error: error instanceof Error ? error.message : String(error)
+				}));
+			return true;
+		}
 
 		if (typedRequest.action === "extractContent" && sender.tab && sender.tab.id) {
 			browser.tabs.sendMessage(sender.tab.id, request).then(sendResponse);
@@ -890,14 +901,20 @@ async function isSidePanelOpen(windowId: number): Promise<boolean> {
 
 async function setupTabListeners() {
 	const browserType = await detectBrowser();
-	if (['chrome', 'brave', 'edge'].includes(browserType)) {
+	const supportsSidePanelTabUpdates = ['chrome', 'brave', 'edge'].includes(browserType);
+	if (supportsSidePanelTabUpdates) {
 		browser.tabs.onActivated.addListener(handleTabChange);
-		browser.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
-			if (changeInfo.status === 'complete') {
+	}
+	browser.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
+		if (changeInfo.status === 'complete') {
+			if (supportsSidePanelTabUpdates) {
 				handleTabChange({ tabId, windowId: tab.windowId });
 			}
-		});
-	}
+			scheduleAutoClipForTab(tabId, tab.url).catch(error => {
+				console.error('[Obsidian Clipper] Failed to schedule auto-clip:', error);
+			});
+		}
+	});
 }
 
 const debouncedPaintHighlights = debounce(async (tabId: number) => {

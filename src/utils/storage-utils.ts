@@ -1,9 +1,15 @@
 import browser from './browser-polyfill';
-import { Settings, ModelConfig, PropertyType, HistoryEntry, Provider, Rating } from '../types/types';
+import { Settings, ModelConfig, PropertyType, HistoryEntry, Provider, Rating, AutoClipSettings } from '../types/types';
 import { debugLog } from './debug';
-import { copyToClipboard } from 'core/popup';
 
 export type { Settings, ModelConfig, PropertyType, HistoryEntry, Provider, Rating };
+
+const defaultAutoClipSettings: AutoClipSettings = {
+	enabled: false,
+	urlPatterns: ['*'],
+	delayMs: 3000,
+	dedupeHours: 24
+};
 
 export let generalSettings: Settings = {
 	vaults: [],
@@ -39,6 +45,7 @@ export let generalSettings: Settings = {
 		highlightActiveLine: true,
 		customCss: ''
 	},
+	autoClipSettings: defaultAutoClipSettings,
 	stats: {
 		addToObsidian: 0,
 		saveFile: 0,
@@ -99,6 +106,7 @@ interface StorageData {
 		defaultPromptContext?: string;
 	};
 	property_types?: PropertyType[];
+	auto_clip_settings?: Partial<AutoClipSettings>;
 	stats?: {
 		addToObsidian: number;
 		saveFile: number;
@@ -151,6 +159,7 @@ export async function loadSettings(): Promise<Settings> {
 			highlightActiveLine: true,
 			customCss: ''
 		},
+		autoClipSettings: defaultAutoClipSettings,
 		stats: {
 			addToObsidian: 0,
 			saveFile: 0,
@@ -213,6 +222,18 @@ export async function loadSettings(): Promise<Settings> {
 			highlightActiveLine: data.reader_settings?.highlightActiveLine ?? defaultSettings.readerSettings.highlightActiveLine,
 			customCss: data.reader_settings?.customCss ?? defaultSettings.readerSettings.customCss
 		},
+		autoClipSettings: {
+			enabled: data.auto_clip_settings?.enabled ?? defaultSettings.autoClipSettings.enabled,
+			urlPatterns: Array.isArray(data.auto_clip_settings?.urlPatterns)
+				? data.auto_clip_settings.urlPatterns.filter(pattern => typeof pattern === 'string')
+				: defaultSettings.autoClipSettings.urlPatterns,
+			delayMs: typeof data.auto_clip_settings?.delayMs === 'number'
+				? data.auto_clip_settings.delayMs
+				: defaultSettings.autoClipSettings.delayMs,
+			dedupeHours: typeof data.auto_clip_settings?.dedupeHours === 'number'
+				? data.auto_clip_settings.dedupeHours
+				: defaultSettings.autoClipSettings.dedupeHours
+		},
 		stats: data.stats || defaultSettings.stats,
 		history: data.history || defaultSettings.history,
 		ratings: data.ratings || defaultSettings.ratings,
@@ -269,6 +290,12 @@ export async function saveSettings(settings?: Partial<Settings>): Promise<void> 
 			autoScroll: generalSettings.readerSettings.autoScroll,
 			highlightActiveLine: generalSettings.readerSettings.highlightActiveLine,
 			customCss: generalSettings.readerSettings.customCss
+		},
+		auto_clip_settings: {
+			enabled: generalSettings.autoClipSettings.enabled,
+			urlPatterns: generalSettings.autoClipSettings.urlPatterns,
+			delayMs: generalSettings.autoClipSettings.delayMs,
+			dedupeHours: generalSettings.autoClipSettings.dedupeHours
 		},
 		stats: generalSettings.stats
 	});
