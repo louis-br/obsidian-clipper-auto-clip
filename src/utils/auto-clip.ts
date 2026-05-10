@@ -20,7 +20,6 @@ import {
 } from './auto-clip-rules';
 
 const AUTO_CLIP_HISTORY_KEY = 'autoClipHistory';
-const AUTO_CLIP_STATUS_KEY = 'autoClipLastStatus';
 const MAX_HISTORY_RECORDS = 1000;
 const MAX_HISTORY_AGE_MS = 30 * 24 * 60 * 60 * 1000;
 const PAGE_CHANGE_REFRESH_DELAY_MS = 2000;
@@ -31,7 +30,7 @@ const autoClipSnapshots = new Map<number, AutoClipSnapshot>();
 const inFlightAutoClips = new Set<string>();
 const inFlightSnapshotRefreshes = new Set<number>();
 
-export type AutoClipTrigger = 'pageLoad' | 'tabClose' | 'tabDiscard' | 'pageChange' | 'debug';
+export type AutoClipTrigger = 'pageLoad' | 'tabClose' | 'tabDiscard' | 'pageChange';
 
 type AutoClipHistory = Record<string, AutoClipDedupeRecord>;
 
@@ -46,36 +45,6 @@ interface AutoClipSnapshot {
 	vault?: string;
 	path?: string;
 	createdAt: number;
-}
-
-async function setAutoClipStatus(status: string, details: Record<string, any> = {}): Promise<void> {
-	try {
-		await browser.storage.local.set({
-			[AUTO_CLIP_STATUS_KEY]: {
-				at: new Date().toISOString(),
-				status,
-				...details
-			}
-		});
-	} catch {
-		// Status recording should never affect clipping.
-	}
-}
-
-export async function getAutoClipStatus(): Promise<any> {
-	const result = await browser.storage.local.get(AUTO_CLIP_STATUS_KEY);
-	return result[AUTO_CLIP_STATUS_KEY];
-}
-
-async function autoClipDebugLog(...args: any[]): Promise<void> {
-	try {
-		const result = await browser.storage.local.get('autoClipDebug');
-		if (result.autoClipDebug) {
-			console.info('[Obsidian Clipper][AutoClip]', ...args);
-		}
-	} catch {
-		// Logging should never affect clipping.
-	}
 }
 
 function isAutoClipCandidateUrl(url: string | undefined): url is string {
@@ -146,10 +115,7 @@ async function sendDirectExtractRequest(tabId: number): Promise<ContentResponse>
 async function extractPageContentForAutoClip(tabId: number): Promise<ContentResponse | null> {
 	try {
 		return await sendDirectExtractRequest(tabId);
-	} catch (firstError) {
-		await autoClipDebugLog('First extraction attempt failed, reinjecting content script', {
-			error: firstError instanceof Error ? firstError.message : String(firstError)
-		});
+	} catch {
 		await injectContentScriptForAutoClip(tabId);
 		return sendDirectExtractRequest(tabId);
 	}
@@ -302,42 +268,23 @@ async function buildAutoClipSnapshot(
 	const tab = await browser.tabs.get(tabId);
 	const currentUrl = trigger === 'pageChange' && expectedUrl ? expectedUrl : tab.url;
 	if (!isAutoClipCandidateUrl(currentUrl) || !generalSettings.autoClipSettings.enabled) {
-		await setAutoClipStatus('skipped-disabled-or-unsupported-url', { tabId, trigger, currentUrl, enabled: generalSettings.autoClipSettings.enabled });
-		await autoClipDebugLog('Skipping snapshot: disabled or unsupported URL', { tabId, trigger, currentUrl, enabled: generalSettings.autoClipSettings.enabled });
 		return null;
 	}
 
 	if (expectedUrl && trigger !== 'pageChange' && normalizeAutoClipUrl(expectedUrl) !== normalizeAutoClipUrl(currentUrl)) {
-		await setAutoClipStatus('skipped-url-changed', { tabId, trigger, expectedUrl, currentUrl });
-		await autoClipDebugLog('Skipping snapshot: URL changed before refresh', { tabId, trigger, expectedUrl, currentUrl });
 		return null;
 	}
 
 	if (!autoClipUrlMatchesPatterns(currentUrl, generalSettings.autoClipSettings.urlPatterns)) {
-		await setAutoClipStatus('skipped-url-pattern-mismatch', {
-			tabId,
-			trigger,
-			currentUrl,
-			patterns: generalSettings.autoClipSettings.urlPatterns
-		});
-		await autoClipDebugLog('Skipping snapshot: URL did not match auto-clip patterns', {
-			tabId,
-			trigger,
-			currentUrl,
-			patterns: generalSettings.autoClipSettings.urlPatterns
-		});
 		return null;
 	}
 
 	const templates = await loadTemplates();
 	if (templates.length === 0) {
-		await setAutoClipStatus('skipped-no-templates', { tabId, trigger, currentUrl });
-		await autoClipDebugLog('Skipping snapshot: no templates loaded', { tabId, trigger, currentUrl });
 		return null;
 	}
 	initializeTriggers(templates);
 
-	await autoClipDebugLog('Extracting page content for snapshot', { tabId, trigger, currentUrl });
 	const extractedData = await extractPageContentForAutoClip(tabId);
 	if (!extractedData?.initializedContent) {
 		throw new Error('Unable to initialize page content for auto-clip.');
@@ -345,9 +292,6 @@ async function buildAutoClipSnapshot(
 
 	const template = await findMatchingTemplate(currentUrl, async () => extractedData.schemaOrgData) || templates[0];
 	if (collectTemplatePromptVariables(template).length > 0) {
-		await setAutoClipStatus('skipped-template-has-prompt-variables', { tabId, trigger, template: template.name, currentUrl });
-		await autoClipDebugLog('Skipping snapshot: template contains prompt variables', { tabId, trigger, template: template.name, currentUrl });
-		console.info(`[Obsidian Clipper] Auto-clip skipped "${template.name}" because it contains interpreter prompt variables.`);
 		return null;
 	}
 
@@ -385,7 +329,6 @@ async function buildAutoClipSnapshot(
 
 async function refreshAutoClipSnapshot(tabId: number, expectedUrl: string | undefined, trigger: AutoClipTrigger): Promise<void> {
 	if (inFlightSnapshotRefreshes.has(tabId)) {
-		await setAutoClipStatus('snapshot-refresh-skipped-in-flight', { tabId, trigger, expectedUrl });
 		return;
 	}
 
@@ -394,14 +337,6 @@ async function refreshAutoClipSnapshot(tabId: number, expectedUrl: string | unde
 		const snapshot = await buildAutoClipSnapshot(tabId, expectedUrl, trigger);
 		if (snapshot) {
 			cacheAutoClipSnapshot(snapshot);
-			await setAutoClipStatus('snapshot-updated', {
-				tabId,
-				trigger,
-				currentUrl: snapshot.url,
-				template: snapshot.templateName,
-				filename: snapshot.filename
-			});
-			await autoClipDebugLog('Updated auto-clip snapshot', { tabId, trigger, url: snapshot.url, template: snapshot.templateName, filename: snapshot.filename });
 		}
 	} finally {
 		inFlightSnapshotRefreshes.delete(tabId);
@@ -422,16 +357,6 @@ function scheduleSnapshotRefresh(
 	const timer = setTimeout(() => {
 		snapshotRefreshTimers.delete(tabId);
 		refreshAutoClipSnapshot(tabId, expectedUrl, trigger).catch(error => {
-			const errorMessage = error instanceof Error ? error.message : String(error);
-			setAutoClipStatus('snapshot-refresh-failed', {
-				tabId,
-				trigger,
-				expectedUrl,
-				error: errorMessage,
-				hint: errorMessage.includes('Missing host permission')
-					? 'Grant auto-clip site access in extension settings.'
-					: undefined
-			});
 			console.error('[Obsidian Clipper] Auto-clip snapshot refresh failed:', error);
 		});
 	}, Math.max(0, delayMs));
@@ -444,42 +369,12 @@ async function downloadAutoClipSnapshot(snapshot: AutoClipSnapshot, trigger: Aut
 
 	const dedupeKey = createAutoClipDedupeKey(snapshot.url, snapshot.templateId);
 	if (inFlightAutoClips.has(dedupeKey) || await hasFreshAutoClipRecord(dedupeKey)) {
-		await setAutoClipStatus('skipped-duplicate-or-in-flight', {
-			tabId: snapshot.tabId,
-			trigger,
-			dedupeKey,
-			currentUrl: snapshot.url,
-			template: snapshot.templateName
-		});
-		await autoClipDebugLog('Skipping download: fresh duplicate or clip already in flight', {
-			tabId: snapshot.tabId,
-			trigger,
-			dedupeKey,
-			currentUrl: snapshot.url,
-			template: snapshot.templateName
-		});
 		return;
 	}
 
 	inFlightAutoClips.add(dedupeKey);
 	try {
 		const downloadId = await downloadMarkdownFile(snapshot.content, snapshot.filename);
-		await setAutoClipStatus('downloaded', {
-			tabId: snapshot.tabId,
-			trigger,
-			filename: snapshot.filename,
-			downloadId,
-			currentUrl: snapshot.url,
-			template: snapshot.templateName
-		});
-		await autoClipDebugLog('Downloaded auto-clip markdown', {
-			tabId: snapshot.tabId,
-			trigger,
-			filename: snapshot.filename,
-			downloadId,
-			currentUrl: snapshot.url,
-			template: snapshot.templateName
-		});
 
 		await incrementStat('saveFile', snapshot.vault, snapshot.path, snapshot.url, snapshot.title);
 		await recordAutoClip(dedupeKey, {
@@ -495,7 +390,7 @@ async function downloadAutoClipSnapshot(snapshot: AutoClipSnapshot, trigger: Aut
 	}
 }
 
-export async function autoClipTab(tabId: number, expectedUrl?: string, trigger: AutoClipTrigger = 'debug'): Promise<void> {
+export async function autoClipTab(tabId: number, expectedUrl?: string, trigger: AutoClipTrigger = 'pageLoad'): Promise<void> {
 	const snapshot = await buildAutoClipSnapshot(tabId, expectedUrl, trigger);
 	if (!snapshot) {
 		return;
@@ -510,30 +405,16 @@ export async function scheduleAutoClipForTab(tabId: number, expectedUrl?: string
 	const tab = await browser.tabs.get(tabId);
 	const currentUrl = expectedUrl || tab.url;
 	if (!generalSettings.autoClipSettings.enabled) {
-		await setAutoClipStatus('not-scheduled-disabled', { tabId, currentUrl });
-		await autoClipDebugLog('Not scheduling: auto-clip disabled', { tabId, currentUrl });
 		clearAutoClipTimers(tabId);
 		return;
 	}
 
 	if (!isAutoClipCandidateUrl(currentUrl)) {
-		await setAutoClipStatus('not-scheduled-unsupported-url', { tabId, currentUrl });
-		await autoClipDebugLog('Not scheduling: unsupported URL', { tabId, currentUrl });
 		clearAutoClipTabState(tabId);
 		return;
 	}
 
 	if (!autoClipUrlMatchesPatterns(currentUrl, generalSettings.autoClipSettings.urlPatterns)) {
-		await setAutoClipStatus('not-scheduled-url-pattern-mismatch', {
-			tabId,
-			currentUrl,
-			patterns: generalSettings.autoClipSettings.urlPatterns
-		});
-		await autoClipDebugLog('Not scheduling: URL did not match patterns', {
-			tabId,
-			currentUrl,
-			patterns: generalSettings.autoClipSettings.urlPatterns
-		});
 		clearAutoClipTabState(tabId);
 		return;
 	}
@@ -545,28 +426,13 @@ export async function scheduleAutoClipForTab(tabId: number, expectedUrl?: string
 	const shouldPrepareSnapshot = hasSnapshotTriggers();
 
 	if (!pageLoad && !shouldPrepareSnapshot) {
-		await setAutoClipStatus('not-scheduled-no-triggers', { tabId, currentUrl });
-		await autoClipDebugLog('Not scheduling: no auto-clip triggers enabled', { tabId, currentUrl });
 		return;
 	}
-
-	await setAutoClipStatus('scheduled', { tabId, currentUrl, delayMs, triggers: generalSettings.autoClipSettings.triggers });
-	await autoClipDebugLog('Scheduled auto-clip', { tabId, currentUrl, delayMs, triggers: generalSettings.autoClipSettings.triggers });
 
 	if (pageLoad) {
 		const timer = setTimeout(() => {
 			pageLoadTimers.delete(tabId);
 			autoClipTab(tabId, currentUrl, 'pageLoad').catch(error => {
-				const errorMessage = error instanceof Error ? error.message : String(error);
-				setAutoClipStatus('failed', {
-					tabId,
-					trigger: 'pageLoad',
-					currentUrl,
-					error: errorMessage,
-					hint: errorMessage.includes('Missing host permission')
-						? 'Grant auto-clip site access in extension settings.'
-						: undefined
-				});
 				console.error('[Obsidian Clipper] Auto-clip failed:', error);
 			});
 		}, delayMs);
@@ -592,7 +458,6 @@ export async function handleAutoClipPageChanged(tabId: number, url?: string): Pr
 		return;
 	}
 
-	await setAutoClipStatus('snapshot-refresh-scheduled', { tabId, trigger: 'pageChange', currentUrl });
 	scheduleSnapshotRefresh(tabId, currentUrl, 'pageChange');
 }
 
@@ -608,8 +473,6 @@ export async function handleAutoClipTabRemoved(tabId: number): Promise<void> {
 	const snapshot = autoClipSnapshots.get(tabId);
 	autoClipSnapshots.delete(tabId);
 	if (!snapshot) {
-		await setAutoClipStatus('skipped-missing-snapshot', { tabId, trigger: 'tabClose' });
-		await autoClipDebugLog('Skipping tab-close auto-clip: no snapshot cached', { tabId });
 		return;
 	}
 
@@ -625,39 +488,8 @@ export async function handleAutoClipTabDiscarded(tabId: number): Promise<void> {
 
 	const snapshot = autoClipSnapshots.get(tabId);
 	if (!snapshot) {
-		await setAutoClipStatus('skipped-missing-snapshot', { tabId, trigger: 'tabDiscard' });
-		await autoClipDebugLog('Skipping tab-discard auto-clip: no snapshot cached', { tabId });
 		return;
 	}
 
 	await downloadAutoClipSnapshot(snapshot, 'tabDiscard');
-}
-
-export async function debugAutoClipActiveTab(): Promise<{ success: boolean; status?: any; tab?: { id?: number; url?: string }; error?: string }> {
-	try {
-		await browser.storage.local.remove(AUTO_CLIP_HISTORY_KEY);
-		const tabs = await browser.tabs.query({ active: true, currentWindow: true });
-		const tab = tabs[0];
-		if (!tab?.id) {
-			await setAutoClipStatus('debug-no-active-tab');
-			return { success: false, status: await getAutoClipStatus(), error: 'No active tab found' };
-		}
-
-		await setAutoClipStatus('debug-started', { tabId: tab.id, currentUrl: tab.url });
-		await autoClipTab(tab.id, tab.url, 'debug');
-		return {
-			success: true,
-			status: await getAutoClipStatus(),
-			tab: { id: tab.id, url: tab.url }
-		};
-	} catch (error) {
-		await setAutoClipStatus('debug-failed', {
-			error: error instanceof Error ? error.message : String(error)
-		});
-		return {
-			success: false,
-			status: await getAutoClipStatus(),
-			error: error instanceof Error ? error.message : String(error)
-		};
-	}
 }

@@ -6,7 +6,6 @@ import { debounce } from './utils/debounce';
 import { Settings } from './types/types';
 import { debugLog } from './utils/debug';
 import {
-	debugAutoClipActiveTab,
 	handleAutoClipPageChanged,
 	handleAutoClipTabDiscarded,
 	handleAutoClipTabRemoved,
@@ -371,16 +370,6 @@ browser.runtime.onMessage.addListener((request: unknown, sender: browser.Runtime
 		}
 
 		// fetchProxy is handled by a separate listener below
-
-		if (typedRequest.action === "debugAutoClipActiveTab") {
-			debugAutoClipActiveTab()
-				.then(sendResponse)
-				.catch((error) => sendResponse({
-					success: false,
-					error: error instanceof Error ? error.message : String(error)
-				}));
-			return true;
-		}
 
 		if (typedRequest.action === "autoClipPageChanged" && sender.tab?.id) {
 			handleAutoClipPageChanged(sender.tab.id, typedRequest.url || sender.tab.url)
