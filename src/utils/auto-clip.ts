@@ -8,7 +8,6 @@ import { compileTemplate } from './template-compiler';
 import { generateFrontmatter, formatPropertyValue } from './shared';
 import { unescapeValue } from './string-utils';
 import { isBlankPage, isRestrictedUrl } from './active-tab-manager';
-import { collectTemplatePromptVariables } from './prompt-variables';
 import {
 	AutoClipDedupeRecord,
 	autoClipUrlMatchesPatterns,
@@ -23,6 +22,8 @@ const AUTO_CLIP_HISTORY_KEY = 'autoClipHistory';
 const MAX_HISTORY_RECORDS = 1000;
 const MAX_HISTORY_AGE_MS = 30 * 24 * 60 * 60 * 1000;
 const PAGE_CHANGE_REFRESH_DELAY_MS = 2000;
+const DOWNLOAD_HISTORY_ERASE_TIMEOUT_MS = 5 * 60 * 1000;
+const PROMPT_VARIABLE_PATTERN = /{{(?:prompt:)?"[\s\S]*?"(?:\|.*?)?}}/;
 
 const pageLoadTimers = new Map<number, ReturnType<typeof setTimeout>>();
 const snapshotRefreshTimers = new Map<number, ReturnType<typeof setTimeout>>();
@@ -64,6 +65,18 @@ function getPropertyTypeMap(): Record<string, string> {
 		types[propertyType.name] = propertyType.type;
 		return types;
 	}, {} as Record<string, string>);
+}
+
+function templateUsesPromptVariables(template: Template): boolean {
+	const values = [
+		template.noteNameFormat,
+		template.path,
+		template.noteContentFormat,
+		template.context,
+		...(template.properties || []).map(property => property.value)
+	];
+
+	return values.some(value => Boolean(value && PROMPT_VARIABLE_PATTERN.test(value)));
 }
 
 async function injectContentScriptForAutoClip(tabId: number): Promise<void> {
@@ -177,16 +190,29 @@ async function eraseDownloadHistoryWhenComplete(downloadId: number): Promise<voi
 		// If search is unavailable or transiently fails, fall back to onChanged.
 	}
 
+	if (!browser.downloads.onChanged?.addListener) {
+		return;
+	}
+
+	let cleanupTimeout: ReturnType<typeof setTimeout> | undefined;
 	const listener = (delta: browser.Downloads.OnChangedDownloadDeltaType) => {
-		if (delta.id !== downloadId || delta.state?.current !== 'complete') {
+		if (delta.id !== downloadId || !delta.state?.current) {
 			return;
 		}
 
 		browser.downloads.onChanged.removeListener(listener);
-		eraseHistory();
+		if (cleanupTimeout) {
+			clearTimeout(cleanupTimeout);
+		}
+		if (delta.state.current === 'complete') {
+			eraseHistory();
+		}
 	};
 
 	browser.downloads.onChanged.addListener(listener);
+	cleanupTimeout = setTimeout(() => {
+		browser.downloads.onChanged.removeListener(listener);
+	}, DOWNLOAD_HISTORY_ERASE_TIMEOUT_MS);
 }
 
 async function downloadMarkdownFile(content: string, filename: string): Promise<number | undefined> {
@@ -291,7 +317,7 @@ async function buildAutoClipSnapshot(
 	}
 
 	const template = await findMatchingTemplate(currentUrl, async () => extractedData.schemaOrgData) || templates[0];
-	if (collectTemplatePromptVariables(template).length > 0) {
+	if (templateUsesPromptVariables(template)) {
 		return null;
 	}
 
@@ -337,6 +363,8 @@ async function refreshAutoClipSnapshot(tabId: number, expectedUrl: string | unde
 		const snapshot = await buildAutoClipSnapshot(tabId, expectedUrl, trigger);
 		if (snapshot) {
 			cacheAutoClipSnapshot(snapshot);
+		} else if (expectedUrl) {
+			autoClipSnapshots.delete(tabId);
 		}
 	} finally {
 		inFlightSnapshotRefreshes.delete(tabId);
@@ -364,7 +392,7 @@ function scheduleSnapshotRefresh(
 	snapshotRefreshTimers.set(tabId, timer);
 }
 
-async function downloadAutoClipSnapshot(snapshot: AutoClipSnapshot, trigger: AutoClipTrigger): Promise<void> {
+async function downloadAutoClipSnapshot(snapshot: AutoClipSnapshot): Promise<void> {
 	await loadSettings();
 
 	const dedupeKey = createAutoClipDedupeKey(snapshot.url, snapshot.templateId);
@@ -396,7 +424,7 @@ export async function autoClipTab(tabId: number, expectedUrl?: string, trigger: 
 		return;
 	}
 	cacheAutoClipSnapshot(snapshot);
-	await downloadAutoClipSnapshot(snapshot, trigger);
+	await downloadAutoClipSnapshot(snapshot);
 }
 
 export async function scheduleAutoClipForTab(tabId: number, expectedUrl?: string): Promise<void> {
@@ -405,7 +433,7 @@ export async function scheduleAutoClipForTab(tabId: number, expectedUrl?: string
 	const tab = await browser.tabs.get(tabId);
 	const currentUrl = expectedUrl || tab.url;
 	if (!generalSettings.autoClipSettings.enabled) {
-		clearAutoClipTimers(tabId);
+		clearAutoClipTabState(tabId);
 		return;
 	}
 
@@ -449,12 +477,14 @@ export async function handleAutoClipPageChanged(tabId: number, url?: string): Pr
 	await loadSettings();
 
 	if (!generalSettings.autoClipSettings.enabled || !hasSnapshotTriggers()) {
+		clearAutoClipTabState(tabId);
 		return;
 	}
 
 	const currentUrl = url || (await browser.tabs.get(tabId)).url;
 	if (!isAutoClipCandidateUrl(currentUrl)
 		|| !autoClipUrlMatchesPatterns(currentUrl, generalSettings.autoClipSettings.urlPatterns)) {
+		clearAutoClipTabState(tabId);
 		return;
 	}
 
@@ -476,7 +506,7 @@ export async function handleAutoClipTabRemoved(tabId: number): Promise<void> {
 		return;
 	}
 
-	await downloadAutoClipSnapshot(snapshot, 'tabClose');
+	await downloadAutoClipSnapshot(snapshot);
 }
 
 export async function handleAutoClipTabDiscarded(tabId: number): Promise<void> {
@@ -491,5 +521,5 @@ export async function handleAutoClipTabDiscarded(tabId: number): Promise<void> {
 		return;
 	}
 
-	await downloadAutoClipSnapshot(snapshot, 'tabDiscard');
+	await downloadAutoClipSnapshot(snapshot);
 }

@@ -27,6 +27,12 @@ export const tabs = {
 
 export const downloads = {
 	download: async () => 1,
+	erase: async () => [],
+	search: async () => [],
+	onChanged: {
+		addListener: () => {},
+		removeListener: () => {},
+	},
 };
 
 export const permissions = {

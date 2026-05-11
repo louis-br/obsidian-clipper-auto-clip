@@ -18,6 +18,7 @@ import { initializePageContent, InitializedPageContent } from './utils/content-e
 declare global {
 	interface Window {
 		obsidianClipperGeneration?: number;
+		obsidianClipperAutoClipCleanup?: () => void;
 	}
 }
 
@@ -29,6 +30,8 @@ declare global {
 	// will silently yield to the freshly-injected instance.
 	window.obsidianClipperGeneration = (window.obsidianClipperGeneration ?? 0) + 1;
 	const myGeneration = window.obsidianClipperGeneration;
+	window.obsidianClipperAutoClipCleanup?.();
+	window.obsidianClipperAutoClipCleanup = undefined;
 
 	debugLog('Clipper', 'Initializing content script, generation', myGeneration);
 
@@ -104,6 +107,9 @@ declare global {
 			clearTimeout(autoClipChangeTimer);
 		}
 		autoClipChangeTimer = setTimeout(() => {
+			if (window.obsidianClipperGeneration !== myGeneration) {
+				return;
+			}
 			autoClipChangeTimer = null;
 			lastAutoClipChangeUrl = window.location.href;
 			browser.runtime.sendMessage({
@@ -126,14 +132,16 @@ declare global {
 		});
 
 		const notifyInputChange = () => scheduleAutoClipPageChanged('input');
-		document.addEventListener('input', notifyInputChange, true);
-		document.addEventListener('change', notifyInputChange, true);
-		document.addEventListener('visibilitychange', () => {
+		const notifyVisibilityChange = () => {
 			if (document.visibilityState === 'hidden') {
 				scheduleAutoClipPageChanged('visibility-hidden', 0);
 			}
-		});
-		window.addEventListener('pagehide', () => scheduleAutoClipPageChanged('pagehide', 0));
+		};
+		const notifyPageHide = () => scheduleAutoClipPageChanged('pagehide', 0);
+		document.addEventListener('input', notifyInputChange, true);
+		document.addEventListener('change', notifyInputChange, true);
+		document.addEventListener('visibilitychange', notifyVisibilityChange);
+		window.addEventListener('pagehide', notifyPageHide);
 
 		const notifyUrlChange = () => {
 			if (window.location.href !== lastAutoClipChangeUrl) {
@@ -142,18 +150,40 @@ declare global {
 		};
 		const originalPushState = history.pushState;
 		const originalReplaceState = history.replaceState;
-		history.pushState = function(...args) {
-			const result = originalPushState.apply(this, args);
+		const pushStateWrapper: typeof history.pushState = function(this: History, data: any, unused: string, url?: string | URL | null) {
+			const result = originalPushState.call(this, data, unused, url);
 			notifyUrlChange();
 			return result;
 		};
-		history.replaceState = function(...args) {
-			const result = originalReplaceState.apply(this, args);
+		const replaceStateWrapper: typeof history.replaceState = function(this: History, data: any, unused: string, url?: string | URL | null) {
+			const result = originalReplaceState.call(this, data, unused, url);
 			notifyUrlChange();
 			return result;
 		};
+		history.pushState = pushStateWrapper;
+		history.replaceState = replaceStateWrapper;
 		window.addEventListener('popstate', notifyUrlChange);
 		window.addEventListener('hashchange', notifyUrlChange);
+
+		window.obsidianClipperAutoClipCleanup = () => {
+			if (autoClipChangeTimer) {
+				clearTimeout(autoClipChangeTimer);
+				autoClipChangeTimer = null;
+			}
+			observer.disconnect();
+			document.removeEventListener('input', notifyInputChange, true);
+			document.removeEventListener('change', notifyInputChange, true);
+			document.removeEventListener('visibilitychange', notifyVisibilityChange);
+			window.removeEventListener('pagehide', notifyPageHide);
+			window.removeEventListener('popstate', notifyUrlChange);
+			window.removeEventListener('hashchange', notifyUrlChange);
+			if (history.pushState === pushStateWrapper) {
+				history.pushState = originalPushState;
+			}
+			if (history.replaceState === replaceStateWrapper) {
+				history.replaceState = originalReplaceState;
+			}
+		};
 	}
 
 	interface ContentResponse {
