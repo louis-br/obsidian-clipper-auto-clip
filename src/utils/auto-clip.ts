@@ -27,11 +27,9 @@ const PROMPT_VARIABLE_PATTERN = /{{(?:prompt:)?"[\s\S]*?"(?:\|.*?)?}}/;
 
 const pageLoadTimers = new Map<number, ReturnType<typeof setTimeout>>();
 const snapshotRefreshTimers = new Map<number, ReturnType<typeof setTimeout>>();
+const snapshotRefreshVersions = new Map<number, number>();
 const autoClipSnapshots = new Map<number, AutoClipSnapshot>();
 const inFlightAutoClips = new Set<string>();
-const inFlightSnapshotRefreshes = new Set<number>();
-
-export type AutoClipTrigger = 'pageLoad' | 'tabClose' | 'tabDiscard' | 'pageChange';
 
 type AutoClipHistory = Record<string, AutoClipDedupeRecord>;
 
@@ -281,23 +279,22 @@ function clearAutoClipTimers(tabId: number): void {
 function clearAutoClipTabState(tabId: number): void {
 	clearAutoClipTimers(tabId);
 	autoClipSnapshots.delete(tabId);
-	inFlightSnapshotRefreshes.delete(tabId);
+	snapshotRefreshVersions.delete(tabId);
 }
 
 async function buildAutoClipSnapshot(
 	tabId: number,
-	expectedUrl: string | undefined,
-	trigger: AutoClipTrigger
+	expectedUrl: string | undefined
 ): Promise<AutoClipSnapshot | null> {
 	await loadSettings();
 
 	const tab = await browser.tabs.get(tabId);
-	const currentUrl = trigger === 'pageChange' && expectedUrl ? expectedUrl : tab.url;
+	const currentUrl = tab.url;
 	if (!isAutoClipCandidateUrl(currentUrl) || !generalSettings.autoClipSettings.enabled) {
 		return null;
 	}
 
-	if (expectedUrl && trigger !== 'pageChange' && normalizeAutoClipUrl(expectedUrl) !== normalizeAutoClipUrl(currentUrl)) {
+	if (expectedUrl && normalizeAutoClipUrl(expectedUrl) !== normalizeAutoClipUrl(currentUrl)) {
 		return null;
 	}
 
@@ -314,6 +311,9 @@ async function buildAutoClipSnapshot(
 	const extractedData = await extractPageContentForAutoClip(tabId);
 	if (!extractedData?.initializedContent) {
 		throw new Error('Unable to initialize page content for auto-clip.');
+	}
+	if (normalizeAutoClipUrl((await browser.tabs.get(tabId)).url || '') !== normalizeAutoClipUrl(currentUrl)) {
+		return null;
 	}
 
 	const template = await findMatchingTemplate(currentUrl, async () => extractedData.schemaOrgData) || templates[0];
@@ -353,28 +353,25 @@ async function buildAutoClipSnapshot(
 	};
 }
 
-async function refreshAutoClipSnapshot(tabId: number, expectedUrl: string | undefined, trigger: AutoClipTrigger): Promise<void> {
-	if (inFlightSnapshotRefreshes.has(tabId)) {
+async function refreshAutoClipSnapshot(
+	tabId: number,
+	expectedUrl: string | undefined,
+	version: number
+): Promise<void> {
+	const snapshot = await buildAutoClipSnapshot(tabId, expectedUrl);
+	if (snapshotRefreshVersions.get(tabId) !== version) {
 		return;
 	}
-
-	inFlightSnapshotRefreshes.add(tabId);
-	try {
-		const snapshot = await buildAutoClipSnapshot(tabId, expectedUrl, trigger);
-		if (snapshot) {
-			cacheAutoClipSnapshot(snapshot);
-		} else if (expectedUrl) {
-			autoClipSnapshots.delete(tabId);
-		}
-	} finally {
-		inFlightSnapshotRefreshes.delete(tabId);
+	if (snapshot) {
+		cacheAutoClipSnapshot(snapshot);
+	} else if (expectedUrl) {
+		autoClipSnapshots.delete(tabId);
 	}
 }
 
 function scheduleSnapshotRefresh(
 	tabId: number,
 	expectedUrl: string | undefined,
-	trigger: AutoClipTrigger,
 	delayMs = PAGE_CHANGE_REFRESH_DELAY_MS
 ): void {
 	const existingTimer = snapshotRefreshTimers.get(tabId);
@@ -382,9 +379,12 @@ function scheduleSnapshotRefresh(
 		clearTimeout(existingTimer);
 	}
 
+	const version = (snapshotRefreshVersions.get(tabId) ?? 0) + 1;
+	snapshotRefreshVersions.set(tabId, version);
+
 	const timer = setTimeout(() => {
 		snapshotRefreshTimers.delete(tabId);
-		refreshAutoClipSnapshot(tabId, expectedUrl, trigger).catch(error => {
+		refreshAutoClipSnapshot(tabId, expectedUrl, version).catch(error => {
 			console.error('[Obsidian Clipper] Auto-clip snapshot refresh failed:', error);
 		});
 	}, Math.max(0, delayMs));
@@ -418,8 +418,8 @@ async function downloadAutoClipSnapshot(snapshot: AutoClipSnapshot): Promise<voi
 	}
 }
 
-export async function autoClipTab(tabId: number, expectedUrl?: string, trigger: AutoClipTrigger = 'pageLoad'): Promise<void> {
-	const snapshot = await buildAutoClipSnapshot(tabId, expectedUrl, trigger);
+export async function autoClipTab(tabId: number, expectedUrl?: string): Promise<void> {
+	const snapshot = await buildAutoClipSnapshot(tabId, expectedUrl);
 	if (!snapshot) {
 		return;
 	}
@@ -460,7 +460,7 @@ export async function scheduleAutoClipForTab(tabId: number, expectedUrl?: string
 	if (pageLoad) {
 		const timer = setTimeout(() => {
 			pageLoadTimers.delete(tabId);
-			autoClipTab(tabId, currentUrl, 'pageLoad').catch(error => {
+			autoClipTab(tabId, currentUrl).catch(error => {
 				console.error('[Obsidian Clipper] Auto-clip failed:', error);
 			});
 		}, delayMs);
@@ -469,11 +469,11 @@ export async function scheduleAutoClipForTab(tabId: number, expectedUrl?: string
 	}
 
 	if (shouldPrepareSnapshot) {
-		scheduleSnapshotRefresh(tabId, currentUrl, 'pageLoad', delayMs);
+		scheduleSnapshotRefresh(tabId, currentUrl, delayMs);
 	}
 }
 
-export async function handleAutoClipPageChanged(tabId: number, url?: string): Promise<void> {
+export async function handleAutoClipUrlChanged(tabId: number, url?: string): Promise<void> {
 	await loadSettings();
 
 	if (!generalSettings.autoClipSettings.enabled || !hasSnapshotTriggers()) {
@@ -488,7 +488,9 @@ export async function handleAutoClipPageChanged(tabId: number, url?: string): Pr
 		return;
 	}
 
-	scheduleSnapshotRefresh(tabId, currentUrl, 'pageChange');
+	clearAutoClipTimers(tabId);
+	autoClipSnapshots.delete(tabId);
+	scheduleSnapshotRefresh(tabId, currentUrl);
 }
 
 export async function handleAutoClipTabRemoved(tabId: number): Promise<void> {

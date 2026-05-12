@@ -18,7 +18,6 @@ import { initializePageContent, InitializedPageContent } from './utils/content-e
 declare global {
 	interface Window {
 		obsidianClipperGeneration?: number;
-		obsidianClipperAutoClipCleanup?: () => void;
 	}
 }
 
@@ -30,8 +29,6 @@ declare global {
 	// will silently yield to the freshly-injected instance.
 	window.obsidianClipperGeneration = (window.obsidianClipperGeneration ?? 0) + 1;
 	const myGeneration = window.obsidianClipperGeneration;
-	window.obsidianClipperAutoClipCleanup?.();
-	window.obsidianClipperAutoClipCleanup = undefined;
 
 	debugLog('Clipper', 'Initializing content script, generation', myGeneration);
 
@@ -91,100 +88,6 @@ declare global {
 
 	// Firefox
 	browser.runtime.sendMessage({ action: "contentScriptLoaded" });
-
-	let autoClipChangeTimer: ReturnType<typeof setTimeout> | null = null;
-	let isAutoClipChangeSuppressed = false;
-	let lastAutoClipChangeUrl = window.location.href;
-
-	function scheduleAutoClipPageChanged(reason: string, delay = 1500): void {
-		if (window.obsidianClipperGeneration !== myGeneration) {
-			return;
-		}
-		if (isAutoClipChangeSuppressed) {
-			return;
-		}
-		if (autoClipChangeTimer) {
-			clearTimeout(autoClipChangeTimer);
-		}
-		autoClipChangeTimer = setTimeout(() => {
-			if (window.obsidianClipperGeneration !== myGeneration) {
-				return;
-			}
-			autoClipChangeTimer = null;
-			lastAutoClipChangeUrl = window.location.href;
-			browser.runtime.sendMessage({
-				action: "autoClipPageChanged",
-				url: window.location.href,
-				reason
-			}).catch(() => {
-				// The background page may be unavailable during navigation or shutdown.
-			});
-		}, Math.max(0, delay));
-	}
-
-	function initializeAutoClipChangeSignals(): void {
-		const observer = new MutationObserver(() => scheduleAutoClipPageChanged('dom'));
-		observer.observe(document.documentElement, {
-			childList: true,
-			subtree: true,
-			characterData: true,
-			attributes: true
-		});
-
-		const notifyInputChange = () => scheduleAutoClipPageChanged('input');
-		const notifyVisibilityChange = () => {
-			if (document.visibilityState === 'hidden') {
-				scheduleAutoClipPageChanged('visibility-hidden', 0);
-			}
-		};
-		const notifyPageHide = () => scheduleAutoClipPageChanged('pagehide', 0);
-		document.addEventListener('input', notifyInputChange, true);
-		document.addEventListener('change', notifyInputChange, true);
-		document.addEventListener('visibilitychange', notifyVisibilityChange);
-		window.addEventListener('pagehide', notifyPageHide);
-
-		const notifyUrlChange = () => {
-			if (window.location.href !== lastAutoClipChangeUrl) {
-				scheduleAutoClipPageChanged('url', 0);
-			}
-		};
-		const originalPushState = history.pushState;
-		const originalReplaceState = history.replaceState;
-		const pushStateWrapper: typeof history.pushState = function(this: History, data: any, unused: string, url?: string | URL | null) {
-			const result = originalPushState.call(this, data, unused, url);
-			notifyUrlChange();
-			return result;
-		};
-		const replaceStateWrapper: typeof history.replaceState = function(this: History, data: any, unused: string, url?: string | URL | null) {
-			const result = originalReplaceState.call(this, data, unused, url);
-			notifyUrlChange();
-			return result;
-		};
-		history.pushState = pushStateWrapper;
-		history.replaceState = replaceStateWrapper;
-		window.addEventListener('popstate', notifyUrlChange);
-		window.addEventListener('hashchange', notifyUrlChange);
-
-		window.obsidianClipperAutoClipCleanup = () => {
-			if (autoClipChangeTimer) {
-				clearTimeout(autoClipChangeTimer);
-				autoClipChangeTimer = null;
-			}
-			observer.disconnect();
-			document.removeEventListener('input', notifyInputChange, true);
-			document.removeEventListener('change', notifyInputChange, true);
-			document.removeEventListener('visibilitychange', notifyVisibilityChange);
-			window.removeEventListener('pagehide', notifyPageHide);
-			window.removeEventListener('popstate', notifyUrlChange);
-			window.removeEventListener('hashchange', notifyUrlChange);
-			if (history.pushState === pushStateWrapper) {
-				history.pushState = originalPushState;
-			}
-			if (history.replaceState === replaceStateWrapper) {
-				history.replaceState = originalReplaceState;
-			}
-		};
-	}
 
 	interface ContentResponse {
 		content: string;
@@ -309,7 +212,6 @@ declare global {
 
 		if (request.action === "getPageContent") {
 			// Flatten shadow DOM before extraction (async, needs main world)
-			isAutoClipChangeSuppressed = true;
 			const flattenTimeout = new Promise<void>(resolve => setTimeout(resolve, 3000));
 			Promise.race([flattenShadowDom(document), flattenTimeout]).then(async () => {
 				let selectedHtml = '';
@@ -429,10 +331,6 @@ declare global {
 			}).catch((error: unknown) => {
 				console.error('[Obsidian Clipper] getPageContent error:', error);
 				sendResponse({ success: false, error: error instanceof Error ? error.message : String(error) });
-			}).finally(() => {
-				setTimeout(() => {
-					isAutoClipChangeSuppressed = false;
-				}, 0);
 			});
 			return true;
 		} else if (request.action === "extractContent") {
@@ -578,7 +476,6 @@ declare global {
 
 	// Initialize highlighter
 	initializeHighlighter();
-	initializeAutoClipChangeSignals();
 
 	// Expose highlighter API on window so reader-script.js (a separate
 	// webpack bundle injected when reader mode activates) can delegate

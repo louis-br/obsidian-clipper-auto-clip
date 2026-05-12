@@ -6,9 +6,9 @@ import { debounce } from './utils/debounce';
 import { Settings } from './types/types';
 import { debugLog } from './utils/debug';
 import {
-	handleAutoClipPageChanged,
 	handleAutoClipTabDiscarded,
 	handleAutoClipTabRemoved,
+	handleAutoClipUrlChanged,
 	scheduleAutoClipForTab
 } from './utils/auto-clip';
 
@@ -370,16 +370,6 @@ browser.runtime.onMessage.addListener((request: unknown, sender: browser.Runtime
 		}
 
 		// fetchProxy is handled by a separate listener below
-
-		if (typedRequest.action === "autoClipPageChanged" && sender.tab?.id) {
-			handleAutoClipPageChanged(sender.tab.id, typedRequest.url || sender.tab.url)
-				.then(() => sendResponse({ success: true }))
-				.catch((error) => sendResponse({
-					success: false,
-					error: error instanceof Error ? error.message : String(error)
-				}));
-			return true;
-		}
 
 		if (typedRequest.action === "extractContent" && sender.tab && sender.tab.id) {
 			browser.tabs.sendMessage(sender.tab.id, request).then(sendResponse);
@@ -914,6 +904,12 @@ async function setupTabListeners() {
 		browser.tabs.onActivated.addListener(handleTabChange);
 	}
 	browser.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
+		if (typeof changeInfo.url === 'string') {
+			handleAutoClipUrlChanged(tabId, changeInfo.url).catch(error => {
+				console.error('[Obsidian Clipper] Failed to handle auto-clip URL change:', error);
+			});
+		}
+
 		if ((changeInfo as { discarded?: boolean }).discarded === true) {
 			handleAutoClipTabDiscarded(tabId).catch(error => {
 				console.error('[Obsidian Clipper] Failed to handle auto-clip tab discard:', error);
