@@ -146,7 +146,7 @@ async function initializeVersionDisplay(): Promise<void> {
 	const usingLatestVersion = document.getElementById('using-latest-version');
 
 	if (versionNumber) {
-		versionNumber.textContent = manifest.version;
+		versionNumber.textContent = manifest.version_name || manifest.version;
 	}
 
 	// Only add update listener for browsers that support it

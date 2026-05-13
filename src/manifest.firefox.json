@@ -3,7 +3,8 @@
 	"default_locale": "en",
 	"name": "Obsidian Web Clipper Auto Clip",
 	"homepage_url": "https://obsidian.md/",
-	"version": "1.6.2",
+	"version": "1.6.2.1",
+	"version_name": "1.6.2+auto-clip.1",
 	"description": "Save and highlight web pages in a private and durable format that you can access offline.",
 	"permissions": [
 		"activeTab",

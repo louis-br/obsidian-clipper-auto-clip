@@ -3,7 +3,6 @@ const fs = require('fs');
 const CopyPlugin = require('copy-webpack-plugin');
 const MiniCssExtractPlugin = require('mini-css-extract-plugin');
 const ZipPlugin = require('zip-webpack-plugin');
-const package = require('./package.json');
 const webpack = require('webpack');
 const TerserPlugin = require('terser-webpack-plugin');
 
@@ -35,6 +34,9 @@ module.exports = (env, argv) => {
 
 	const outputDir = getOutputDir();
 	const browserName = isFirefox ? 'firefox' : (isSafari ? 'safari' : 'chrome');
+	const manifestPath = isFirefox ? 'src/manifest.firefox.json' :
+		(isSafari ? 'src/manifest.safari.json' : 'src/manifest.chrome.json');
+	const manifest = JSON.parse(fs.readFileSync(path.resolve(__dirname, manifestPath), 'utf8'));
 
 	const mainConfig = {
 		mode: argv.mode,
@@ -138,10 +140,9 @@ module.exports = (env, argv) => {
 		plugins: [
 			new CopyPlugin({
 				patterns: [
-					{ 
-						from: isFirefox ? "src/manifest.firefox.json" : 
-							  (isSafari ? "src/manifest.safari.json" : "src/manifest.chrome.json"), 
-						to: "manifest.json" 
+					{
+						from: manifestPath,
+						to: "manifest.json"
 					},
 					{ from: "src/popup.html", to: "popup.html" },
 					{ from: "src/side-panel.html", to: "side-panel.html" },
@@ -174,7 +175,7 @@ module.exports = (env, argv) => {
 			...(isProduction ? [
 				new ZipPlugin({
 					path: path.resolve(__dirname, 'builds'),
-					filename: `obsidian-web-clipper-${package.version}-${browserName}.zip`,
+					filename: `obsidian-web-clipper-${manifest.version}-${browserName}.zip`,
 				})
 			] : [])
 		]
