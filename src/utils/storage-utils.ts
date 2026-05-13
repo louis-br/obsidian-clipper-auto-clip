@@ -1,6 +1,7 @@
 import browser from './browser-polyfill';
 import { Settings, ModelConfig, PropertyType, HistoryEntry, Provider, Rating, AutoClipSettings } from '../types/types';
 import { debugLog } from './debug';
+import { DEFAULT_AUTO_CLIP_FILENAME_TEMPLATE } from './auto-clip-rules';
 
 export type { Settings, ModelConfig, PropertyType, HistoryEntry, Provider, Rating };
 
@@ -12,6 +13,7 @@ const defaultAutoClipSettings: AutoClipSettings = {
 		tabDiscard: false
 	},
 	urlPatterns: ['*'],
+	filenameTemplate: DEFAULT_AUTO_CLIP_FILENAME_TEMPLATE,
 	delayMs: 3000,
 	dedupeHours: 24
 };
@@ -237,6 +239,9 @@ export async function loadSettings(): Promise<Settings> {
 			urlPatterns: Array.isArray(data.auto_clip_settings?.urlPatterns)
 				? data.auto_clip_settings.urlPatterns.filter(pattern => typeof pattern === 'string')
 				: defaultSettings.autoClipSettings.urlPatterns,
+			filenameTemplate: typeof data.auto_clip_settings?.filenameTemplate === 'string' && data.auto_clip_settings.filenameTemplate.trim() !== ''
+				? data.auto_clip_settings.filenameTemplate.trim()
+				: defaultSettings.autoClipSettings.filenameTemplate,
 			delayMs: typeof data.auto_clip_settings?.delayMs === 'number'
 				? data.auto_clip_settings.delayMs
 				: defaultSettings.autoClipSettings.delayMs,
@@ -305,6 +310,7 @@ export async function saveSettings(settings?: Partial<Settings>): Promise<void> 
 			enabled: generalSettings.autoClipSettings.enabled,
 			triggers: generalSettings.autoClipSettings.triggers,
 			urlPatterns: generalSettings.autoClipSettings.urlPatterns,
+			filenameTemplate: generalSettings.autoClipSettings.filenameTemplate.trim() || defaultAutoClipSettings.filenameTemplate,
 			delayMs: generalSettings.autoClipSettings.delayMs,
 			dedupeHours: generalSettings.autoClipSettings.dedupeHours
 		},

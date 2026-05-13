@@ -1,5 +1,8 @@
 import { sanitizeFileName } from './string-utils';
 
+export const DEFAULT_AUTO_CLIP_FILENAME_TEMPLATE = '{{date|date:"YYYY-MM-DD HH-mm-ss"}} - {{site|safe_name}} - {{title|safe_name}}';
+export const MAX_AUTO_CLIP_FILENAME_BASENAME_LENGTH = 180;
+
 export interface AutoClipDedupeRecord {
 	clippedAt: number;
 	downloadId?: number;
@@ -72,9 +75,10 @@ export function normalizeDownloadPath(path: string): string {
 
 export function buildAutoClipDownloadFilename(path: string, noteName: string): string {
 	const sanitizedNoteName = sanitizeFileName(noteName || 'Untitled');
-	const fileName = sanitizedNoteName.toLowerCase().endsWith('.md')
-		? sanitizedNoteName
-		: `${sanitizedNoteName}.md`;
+	const hasMarkdownExtension = sanitizedNoteName.toLowerCase().endsWith('.md');
+	const baseName = hasMarkdownExtension ? sanitizedNoteName.slice(0, -3) : sanitizedNoteName;
+	const safeBaseName = (baseName || 'Untitled').slice(0, MAX_AUTO_CLIP_FILENAME_BASENAME_LENGTH).trim() || 'Untitled';
+	const fileName = `${safeBaseName}.md`;
 	const normalizedPath = normalizeDownloadPath(path);
 
 	return normalizedPath ? `${normalizedPath}/${fileName}` : fileName;

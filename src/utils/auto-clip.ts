@@ -10,6 +10,7 @@ import { unescapeValue } from './string-utils';
 import { isBlankPage, isRestrictedUrl } from './active-tab-manager';
 import {
 	AutoClipDedupeRecord,
+	DEFAULT_AUTO_CLIP_FILENAME_TEMPLATE,
 	autoClipUrlMatchesPatterns,
 	buildAutoClipDownloadFilename,
 	createAutoClipNoteName,
@@ -65,8 +66,9 @@ function getPropertyTypeMap(): Record<string, string> {
 	}, {} as Record<string, string>);
 }
 
-function templateUsesPromptVariables(template: Template): boolean {
+function autoClipUsesPromptVariables(template: Template, filenameTemplate: string): boolean {
 	const values = [
+		filenameTemplate,
 		template.noteNameFormat,
 		template.path,
 		template.noteContentFormat,
@@ -317,13 +319,15 @@ async function buildAutoClipSnapshot(
 	}
 
 	const template = await findMatchingTemplate(currentUrl, async () => extractedData.schemaOrgData) || templates[0];
-	if (templateUsesPromptVariables(template)) {
+	const filenameTemplate = generalSettings.autoClipSettings.filenameTemplate.trim() || DEFAULT_AUTO_CLIP_FILENAME_TEMPLATE;
+	if (autoClipUsesPromptVariables(template, filenameTemplate)) {
 		return null;
 	}
 
 	const variables = extractedData.initializedContent.currentVariables;
-	const [compiledProperties, compiledNoteName, compiledPath, compiledContent] = await Promise.all([
+	const [compiledProperties, compiledFilenameTemplate, compiledNoteName, compiledPath, compiledContent] = await Promise.all([
 		compileAutoClipProperties(template, variables, tabId, currentUrl),
+		compileTemplate(tabId, filenameTemplate, variables, currentUrl),
 		compileTemplate(tabId, template.noteNameFormat, variables, currentUrl),
 		compileTemplate(tabId, template.path, variables, currentUrl),
 		template.noteContentFormat
@@ -337,7 +341,8 @@ async function buildAutoClipSnapshot(
 		|| extractedData.initializedContent.noteName
 		|| extractedData.title
 		|| 'Untitled';
-	const filename = buildAutoClipDownloadFilename(compiledPath, createAutoClipNoteName(noteName, currentUrl, extractedData.site));
+	const filenameBase = compiledFilenameTemplate.trim() || createAutoClipNoteName(noteName, currentUrl, extractedData.site);
+	const filename = buildAutoClipDownloadFilename(compiledPath, filenameBase);
 
 	return {
 		content,

@@ -18,7 +18,7 @@ import { getClipHistory } from '../utils/storage-utils';
 import dayjs from 'dayjs';
 import weekOfYear from 'dayjs/plugin/weekOfYear';
 import { showModal, hideModal } from '../utils/modal-utils';
-import { parseAutoClipPatterns } from '../utils/auto-clip-rules';
+import { DEFAULT_AUTO_CLIP_FILENAME_TEMPLATE, parseAutoClipPatterns } from '../utils/auto-clip-rules';
 
 dayjs.extend(weekOfYear);
 
@@ -263,10 +263,12 @@ function saveSettingsFromForm(): void {
 	const autoClipTabCloseTrigger = document.getElementById('auto-clip-tab-close-trigger') as HTMLInputElement;
 	const autoClipTabDiscardTrigger = document.getElementById('auto-clip-tab-discard-trigger') as HTMLInputElement;
 	const autoClipPatternsInput = document.getElementById('auto-clip-url-patterns') as HTMLTextAreaElement;
+	const autoClipFilenameTemplateInput = document.getElementById('auto-clip-filename-template') as HTMLInputElement;
 	const autoClipDelayInput = document.getElementById('auto-clip-delay') as HTMLInputElement;
 	const autoClipDedupeHoursInput = document.getElementById('auto-clip-dedupe-hours') as HTMLInputElement;
 	const delaySeconds = Number(autoClipDelayInput?.value);
 	const dedupeHours = Number(autoClipDedupeHoursInput?.value);
+	const filenameTemplate = autoClipFilenameTemplateInput?.value.trim();
 
 	const updatedSettings = {
 		...generalSettings, // Keep existing settings
@@ -289,6 +291,9 @@ function saveSettingsFromForm(): void {
 			urlPatterns: autoClipPatternsInput
 				? parseAutoClipPatterns(autoClipPatternsInput.value)
 				: generalSettings.autoClipSettings.urlPatterns,
+			filenameTemplate: autoClipFilenameTemplateInput
+				? filenameTemplate || DEFAULT_AUTO_CLIP_FILENAME_TEMPLATE
+				: generalSettings.autoClipSettings.filenameTemplate,
 			delayMs: Number.isFinite(delaySeconds)
 				? Math.max(0, Math.round(delaySeconds * 1000))
 				: generalSettings.autoClipSettings.delayMs,
@@ -378,6 +383,7 @@ function initializeAutoClipSettings(): void {
 	const tabCloseTrigger = document.getElementById('auto-clip-tab-close-trigger') as HTMLInputElement;
 	const tabDiscardTrigger = document.getElementById('auto-clip-tab-discard-trigger') as HTMLInputElement;
 	const patternsInput = document.getElementById('auto-clip-url-patterns') as HTMLTextAreaElement;
+	const filenameTemplateInput = document.getElementById('auto-clip-filename-template') as HTMLInputElement;
 	const delayInput = document.getElementById('auto-clip-delay') as HTMLInputElement;
 	const dedupeHoursInput = document.getElementById('auto-clip-dedupe-hours') as HTMLInputElement;
 	const siteAccessButton = document.getElementById('auto-clip-site-access') as HTMLButtonElement;
@@ -408,6 +414,10 @@ function initializeAutoClipSettings(): void {
 
 	if (patternsInput) {
 		patternsInput.value = generalSettings.autoClipSettings.urlPatterns.join('\n');
+	}
+	if (filenameTemplateInput) {
+		filenameTemplateInput.value = generalSettings.autoClipSettings.filenameTemplate || DEFAULT_AUTO_CLIP_FILENAME_TEMPLATE;
+		filenameTemplateInput.placeholder = DEFAULT_AUTO_CLIP_FILENAME_TEMPLATE;
 	}
 	if (delayInput) {
 		delayInput.value = String(Math.round(generalSettings.autoClipSettings.delayMs / 1000));

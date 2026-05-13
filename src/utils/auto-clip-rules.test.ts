@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
+	DEFAULT_AUTO_CLIP_FILENAME_TEMPLATE,
+	MAX_AUTO_CLIP_FILENAME_BASENAME_LENGTH,
 	autoClipUrlMatchesPatterns,
 	buildAutoClipDownloadFilename,
 	createAutoClipNoteName,
@@ -9,6 +11,7 @@ import {
 	normalizeDownloadPath,
 	parseAutoClipPatterns
 } from './auto-clip-rules';
+import { compileTemplate } from './template-compiler';
 
 describe('auto-clip rules', () => {
 	it('parses URL patterns from textarea content', () => {
@@ -63,5 +66,29 @@ describe('auto-clip rules', () => {
 		);
 		expect(createAutoClipNoteName('Specific title', 'https://example.com/path')).toBe('Specific title');
 		expect(createAutoClipNoteName('', 'https://example.com/')).toBe('example.com');
+	});
+
+	it('builds filenames from the default filename template and keeps folders from the template path', async () => {
+		const compiledFilename = await compileTemplate(0, DEFAULT_AUTO_CLIP_FILENAME_TEMPLATE, {
+			'{{date}}': '2026-05-13T10:30:45',
+			'{{site}}': 'Example: Site?',
+			'{{title}}': 'AC/DC: "Back in Black" Review? [2026]'
+		}, 'https://example.com/articles/review');
+
+		expect(compiledFilename).toBe('2026-05-13 10-30-45 - Example Site - ACDC Back in Black Review 2026');
+		expect(buildAutoClipDownloadFilename('Clippings/Articles', compiledFilename)).toBe(
+			'Clippings/Articles/2026-05-13 10-30-45 - Example Site - ACDC Back in Black Review 2026.md'
+		);
+	});
+
+	it('does not append a second markdown extension to templated filenames', () => {
+		expect(buildAutoClipDownloadFilename('Clippings', '2026-05-13 - Example - Article.md')).toBe(
+			'Clippings/2026-05-13 - Example - Article.md'
+		);
+	});
+
+	it('caps long auto-clip filename basenames before adding the markdown extension', () => {
+		const filename = buildAutoClipDownloadFilename('', 'a'.repeat(400));
+		expect(filename).toBe(`${'a'.repeat(MAX_AUTO_CLIP_FILENAME_BASENAME_LENGTH)}.md`);
 	});
 });

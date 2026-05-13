@@ -3,6 +3,7 @@
 // of browser-polyfill and storage-utils resolve without error.
 
 import type { Settings } from '../types/types';
+import { DEFAULT_AUTO_CLIP_FILENAME_TEMPLATE } from './auto-clip-rules';
 
 export default {} as any;
 
@@ -48,6 +49,7 @@ export const generalSettings: Settings = {
 			tabDiscard: false,
 		},
 		urlPatterns: ['*'],
+		filenameTemplate: DEFAULT_AUTO_CLIP_FILENAME_TEMPLATE,
 		delayMs: 3000,
 		dedupeHours: 24,
 	},

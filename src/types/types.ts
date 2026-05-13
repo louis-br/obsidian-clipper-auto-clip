@@ -80,6 +80,7 @@ export interface AutoClipSettings {
 	enabled: boolean;
 	triggers: AutoClipTriggers;
 	urlPatterns: string[];
+	filenameTemplate: string;
 	delayMs: number;
 	dedupeHours: number;
 }

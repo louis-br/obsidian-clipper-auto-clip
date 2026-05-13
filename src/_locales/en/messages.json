@@ -113,6 +113,12 @@
 	"autoClipUrlPatternsDescription": {
 		"message": "One prefix or /regex/ per line. Use * to match all pages."
 	},
+	"autoClipFilenameTemplate": {
+		"message": "Auto-clip filename template"
+	},
+	"autoClipFilenameTemplateDescription": {
+		"message": "Template for auto-clip download filenames. Variables and filters are supported."
+	},
 	"behavior": {
 		"message": "Behavior"
 	},
