@@ -1,10 +1,10 @@
 {
 	"manifest_version": 3,
 	"default_locale": "en",
-	"name": "Obsidian Web Clipper",
+	"name": "Obsidian Web Clipper Auto Clip",
 	"homepage_url": "https://obsidian.md/",
 	"version": "1.6.2",
-	"description": "Save and highlight web pages in a private and durable format that you can access offline. The official extension for Obsidian.",
+	"description": "Save and highlight web pages in a private and durable format that you can access offline.",
 	"permissions": [
 		"activeTab",
 		"clipboardWrite",
@@ -85,7 +85,7 @@
 	},
 	"browser_specific_settings": {
 		"gecko": {
-			"id": "clipper@obsidian.md",
+			"id": "obsidian-clipper-auto-clip@local",
 			"strict_min_version": "113.0",
 			"data_collection_permissions": {
 				"required": ["none"]
